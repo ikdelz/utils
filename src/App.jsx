@@ -1,59 +1,57 @@
-import { openDB } from 'idb'
 import './App.css'
 import { useEffect, useState } from 'react';
-
-const initDB = async () => {
-  return openDB("db1", 1, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains("notes")) {
-        db.createObjectStore("notes", { keyPath: "id", autoIncrement: true });
-      }
-    },
-  });
-};
+import { saveTodo, savePending, getPending, clearPending, getTodos } from './db';
 
 function App() {
-  const [newNote, setNote] = useState(null)
-  const [notes, setNotes] = useState(null)
+  const [newTodo, setTodo] = useState(null)
+  const [todos, setTodos] = useState(null)
 
-  const saveNote = async(e) => {
+  const submit = async(e) => {
     e.preventDefault()
 
-    const db = await initDB()
-
-    const notes = await db.getAll("notes")
-    notes.forEach(note => {
-      if (newNote === note.note) {
-        alert("Such note exists!")
-        return
-      }
-    })
-
-    db.put("notes", {
-      newNote,
-      createdAt: new Date(Date.now()),
-    });
-  }
-
-  useEffect(() => {
-    const getNotes = async() => {
-      const db = await initDB()
-
-      const notes = await db.getAll("notes")
-      setNotes(notes)
+    // !double syncing -> fix: api call to store in db
+    if (navigator.onLine) {
+      saveTodo(newTodo)
     }
 
-    getNotes()
+    if (!navigator.onLine){
+      savePending(newTodo)
+    }
+  }
+  
+  useEffect(() => {
+    window.addEventListener("online", async (e) => {
+      console.log("Syncing data...");
+
+      const pendings = await getPending();
+      for(let pending of pendings) {
+        await saveTodo(pending.todo);
+
+        await clearPending(pending.id);
+      }
+    });
+
+    return () => window.removeEventListener("online", () => {});
+  }, [])
+
+  useEffect(() => {
+    const getdata = async() => {
+      const todos = await getTodos();
+
+      setTodos(todos)
+    }
+
+    getdata()
   }, [])
 
   return (
     <div>
-      <form onSubmit={saveNote}>
-        <input type="text" onChange={(e) => setNote(e.target.value)} required />
+      <form onSubmit={submit}>
+        <input type="text" onChange={(e) => setTodo(e.target.value)} required />
         <button>Store</button>
       </form>
-      {notes && notes.map(note => (
-        <p>{note.newNote}</p>
+      {todos && todos.map(td => (
+        <p>{td.todo}</p>
       ))}
     </div>
   );
